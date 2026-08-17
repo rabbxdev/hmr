@@ -1,0 +1,35 @@
+{
+  "name": "@rabbx/hmr",
+  "version": "1.0.0",
+  "description": "Universal zero-dep HMR engine powered by @rabbx/ws",
+  "type": "module",
+  "main": "./dist/server.js",
+  "exports": {
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "dependencies": {
+    "@rabbx/ws": "^1.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@rabbx/ws": "^1.1.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
