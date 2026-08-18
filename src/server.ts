@@ -1,7 +1,6 @@
-// src/server.ts
 import { WebSocketServer, createBunServer, createServer as createNodeWSS } from '@rabbx/ws/server';
 import type { RabbitSocket } from '@rabbx/ws';
-import type { Server as NodeHttpServer } from 'http';
+import type { Server as NodeHttpServer } from 'node:http';
 
 export interface HMRServerOptions {
   path?: string;
