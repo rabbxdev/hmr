@@ -265,7 +265,7 @@ class HMRClient {
       
       ws.addEventListener("open",()=>{
        if(ws.readyState === 1) {
-          console.log(data.ws)
+        
           this.ws.send(data.packed)
         }
       })

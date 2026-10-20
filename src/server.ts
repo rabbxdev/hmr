@@ -80,12 +80,12 @@ export class HMRServer {
   }
   public on(event:string,cb:(event:Socket)=>{}){
     emitter.on("message",({socket,data})=>{
-      console.log(data,socket)
+    
       if(event && typeof event === "string" && typeof cb === "function"){
         
         
          let payload = unpack(data)
-        console.log(payload,"g")
+    
        if(payload && payload.event === event){
          cb({socket,data:payload})
          return
