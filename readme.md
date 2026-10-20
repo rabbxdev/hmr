@@ -49,6 +49,7 @@ watcher.on('change', (path) => {
     type: path.endsWith('.css') ? 'css' : 'js', 
     path 
   });
+  hmrServer.emit("custom",{type:"page:reload",path})
 });
 ```
 
@@ -99,21 +100,22 @@ export default {
 
 Import the client bundle at your application entry script to establish the HMR socket listener and inject the error overlay handler:
 ```ts
-import '@rabbx/hmr/client';
-
-if (import.meta.hot) {
-  import.meta.hot.accept((newModule) => {
+import {hmr,hot} from '@rabbx/hmr/client';
+//can be global defined
+if (hot) {
+  hot.accept((newModule) => {
     console.log('Module hot-swapped successfully!');
   });
 
-  import.meta.hot.dispose((data) => {
+  hot.dispose((data) => {
     // Save transient UI state before execution context reloads
     data.scrollPosition = window.scrollY;
   });
 
-  import.meta.hot.on('custom-server-event', (data) => {
+  hot.on('custom', (data) => {
     console.log('Received custom signal:', data);
   });
+  hot.send('custom:b',{});
 }
 ```
 ## API Reference
