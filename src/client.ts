@@ -279,9 +279,9 @@ class HMRClient {
       emitter.emit("open",{ws:this.ws})
     })
 
-    this.ws.addEventListener('message', (e) => {
+    this.ws.addEventListener('message', async (e) => {
       try {
-        let arrBuffer = await e.data.arrayBuffer();
+        let arrBuffer = await e.data?.arrayBuffer();
         if (arrBuffer instanceof ArrayBuffer) {
           let da = unpack(arrBuffer);
           
