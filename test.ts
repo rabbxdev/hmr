@@ -1,6 +1,6 @@
 import { WebSocket } from '@rabbx/ws';
 import {pack,unpack} from "msgpackr";
-const ws = new WebSocket('ws://localhost:3000/__rabbx_hmr');
+const ws = new WebSocket('ws://localhost:4000/__rabbx_hmr');
 
 ws.addEventListener('open', () => {
   console.log('Connected');
@@ -9,7 +9,7 @@ ws.addEventListener('open', () => {
 });
 
 ws.addEventListener('message', (e) => {
-  console.log('Received:', e.data); // string | ArrayBuffer
+  console.log('Received:', unpack(e.data)); // string | ArrayBuffer
 });
 
 ws.addEventListener('close', (e) => {

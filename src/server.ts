@@ -1,52 +1,113 @@
 import { WebSocketServer, createBunServer, createServer as createNodeWSS } from '@rabbx/ws/server';
 import type { RabbitSocket } from '@rabbx/ws';
 import type { Server as NodeHttpServer } from 'node:http';
-import Emitter from "eventemitter3";
-import {pack,unpack} from "msgpackr";
+import { pack, unpack } from "msgpackr";
+
 export interface HMRServerOptions {
   path?: string;
+  maxPayload?: number;
 }
-export interface Socket{
-  socket:RabbitSocket;
-  data?:unknown;
-  client?:unknown
+
+export interface SocketData {
+  socket: RabbitSocket;
+  data?: unknown;
+  client?: Set<RabbitSocket>;
 }
-const emitter = new Emitter();
+
+type MessageCallback = (data: SocketData) => void;
+type CloseCallback = (data: SocketData) => void;
 
 export class HMRServer {
-  private wss: WebSocketServer;
+  private wss: WebSocketServer | null = null;
   private clients = new Set<RabbitSocket>();
+  private messageListeners = new Map<string, Set<MessageCallback>>();
+  private closeListeners = new Set<CloseCallback>();
 
   constructor(options: HMRServerOptions = {}) {
     const path = options.path || '/__rabbx_hmr';
-    this.wss = new WebSocketServer({ path,maxPayload: options?.maxPayload || 60*1024 });
-  
+    const maxPayload = options.maxPayload ?? 60 * 1024;
+    
+    this.wss = new WebSocketServer({ path, maxPayload });
     this.setupListeners();
   }
 
   private setupListeners() {
+    if (!this.wss) return;
+
     this.wss.addEventListener('connection', ({ detail: { socket } }) => {
       this.clients.add(socket);
-  
-    socket.addEventListener('message', (e) => {
-     emitter.emit("message",{socket,data:e.data})
-      
-     });
 
-  
+      socket.addEventListener('message', (e) => {
+        this.handleMessage(socket, e.data);
+      });
+
       socket.addEventListener('close', () => {
-        emitter.emit("close",{socket,client:this.clients})
         this.clients.delete(socket);
+        this.handleClose(socket);
       });
     });
+  }
+
+  private handleMessage(socket: RabbitSocket, data: unknown): void {
+    let payload: unknown;
     
+    try {
+      payload = unpack(data as ArrayBuffer);
+    } catch {
+      payload = data;
+    }
+
+    if (payload && typeof payload === 'object' && payload !== null && 'type' in payload) {
+      const eventType = (payload as { type: string }).type;
+      const listeners = this.messageListeners.get(eventType);
+      
+      if (listeners) {
+        for (const cb of listeners) {
+          try {
+            cb({ socket, data: payload });
+          } catch (err) {
+            console.error(`Error in message listener for event "${eventType}":`, err);
+          }
+        }
+      }
+    }
+
+    // Notify wildcard listeners
+    const wildcardListeners = this.messageListeners.get('*');
+    if (wildcardListeners) {
+      for (const cb of wildcardListeners) {
+        try {
+          cb({ socket, data: payload ?? data });
+        } catch (err) {
+          console.error('Error in wildcard message listener:', err);
+        }
+      }
+    }
+  }
+
+  private handleClose(socket: RabbitSocket): void {
+    for (const cb of this.closeListeners) {
+      try {
+        cb({ socket, client: this.clients });
+      } catch (err) {
+        console.error('Error in close listener:', err);
+      }
+    }
   }
 
   /** Automatically attach to a Node.js HTTP Server */
   public static attachNode(httpServer: NodeHttpServer, options: HMRServerOptions = {}) {
-    const server = new HMRServer(options);
-    server.wss = createNodeWSS(httpServer, { path: options.path || '/__rabbx_hmr',maxPayload: options?.maxPayload || 60*1024  });
+    const path = options.path || '/__rabbx_hmr';
+    const maxPayload = options.maxPayload ?? 60 * 1024;
+    
+    const server = Object.create(HMRServer.prototype) as HMRServer;
+    server.clients = new Set<RabbitSocket>();
+    server.messageListeners = new Map<string, Set<MessageCallback>>();
+    server.closeListeners = new Set<CloseCallback>();
+    
+    server.wss = createNodeWSS(httpServer, { path, maxPayload });
     server.setupListeners();
+    
     return server;
   }
 
@@ -54,8 +115,12 @@ export class HMRServer {
   public static createBun(options: HMRServerOptions = {}) {
     const path = options.path || '/__rabbx_hmr';
     const { config, server: wssInstance } = createBunServer({ path });
+
+    const server = Object.create(HMRServer.prototype) as HMRServer;
+    server.clients = new Set<RabbitSocket>();
+    server.messageListeners = new Map<string, Set<MessageCallback>>();
+    server.closeListeners = new Set<CloseCallback>();
     
-    const server = new HMRServer(options);
     server.wss = wssInstance as unknown as WebSocketServer;
     server.setupListeners();
 
@@ -65,70 +130,78 @@ export class HMRServer {
     };
   }
 
-  public send(event: string, data: unknown) {
-    let payload;
-   // if(data instanceof Buffer || data?.toString){
-      payload = pack({type:event,data})
+  public send(event: string, data: unknown): void {
+    if (!this.wss) return;
     
-   // payload = JSON.stringify({ type: event, data, timestamp: Date.now() });
+    const payload = pack({ type: event, data });
+    const clients = Array.from(this.clients);
     
-     for (const client of this.clients) {
+    for (const client of clients) {
       if (client.readyState === 1) { // OPEN
-        client.send(payload);
+        try {
+          client.send(payload);
+        } catch {
+          this.clients.delete(client);
+        }
       }
     }
-  }
-  public on(event:string,cb:(event:Socket)=>{}){
-    emitter.on("message",({socket,data})=>{
-    
-      if(event && typeof event === "string" && typeof cb === "function"){
-        
-        
-         let payload = unpack(data)
-    
-       if(payload && payload.event === event){
-         cb({socket,data:payload})
-         return
-       }else{
-          cb({socket,data})
-       }
-        
-        
-      }
-    })
-  }
-  public emit(event:string,data:unknown){
-    if(event && data){
-      
-      this.send(event,data)
-    }
-  }
-  
-  public onClose(cb:(event:Socket)=>{}){
-    emitter.on("close",({socket,client})=>{
-      if(cb && typeof cb === "function"){
-        cb({socket,client})
-      }
-    })
   }
 
-  public notifyUpdate(update: { type: 'js' | 'css'; path: string }) {
+  public on(event: string, cb: MessageCallback): () => void {
+    if (!event || typeof event !== 'string' || typeof cb !== 'function') {
+      throw new Error('Invalid arguments: event must be a non-empty string, cb must be a function');
+    }
+
+    let listeners = this.messageListeners.get(event);
+    if (!listeners) {
+      listeners = new Set();
+      this.messageListeners.set(event, listeners);
+    }
+    listeners.add(cb);
+
+    return () => {
+      listeners?.delete(cb);
+      if (listeners && listeners.size === 0) {
+        this.messageListeners.delete(event);
+      }
+    };
+  }
+
+  public emit(event: string, data: unknown): void {
+    if (event && data != null) {
+      this.send(event, data);
+    }
+  }
+
+  public onClose(cb: CloseCallback): () => void {
+    if (typeof cb !== 'function') {
+      throw new Error('Callback must be a function');
+    }
+
+    this.closeListeners.add(cb);
+
+    return () => {
+      this.closeListeners.delete(cb);
+    };
+  }
+
+  public notifyUpdate(update: { type: 'js' | 'css'; path: string }): void {
     this.send('rabbx:update', update);
   }
 
-  public notifyError(err: { message: string; stack?: string }) {
+  public notifyError(err: { message: string; stack?: string }): void {
     this.send('rabbx:error', err);
   }
 
-  public clearError() {
+  public clearError(): void {
     this.send('rabbx:clear-error', {});
   }
 
-  public handleDeno(req: Request) {
-    return this.wss.handleDeno(req);
+  public handleDeno(req: Request): Response | undefined {
+    return this.wss?.handleDeno(req);
   }
 
-  public handleRequest(req: Request) {
-    return this.wss.handleRequest(req);
+  public handleRequest(req: Request): Response | undefined {
+    return this.wss?.handleRequest(req);
   }
 }

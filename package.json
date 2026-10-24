@@ -1,6 +1,6 @@
 {
   "name": "@rabbx/hmr",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Universal zero-dep HMR engine powered by @rabbx/ws",
   "type": "module",
   "main": "./dist/server.js",
@@ -13,7 +13,7 @@
     }
   },
   "files": [
-    "dist",
+    "./dist",
     "readme.md",
     "licence.md"
   ],

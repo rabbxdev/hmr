@@ -6,7 +6,7 @@ const app = express();
 const httpServer = createServer(app);
 
 // Attach @rabbx/hmr to the underlying HTTP server
-//const hmrServer = await HMRServer.createBun() //HMRServer.attachNode({ path: '/__rabbx_hmr' });
+//const hmrServer = HMRServer.attachNode({ path: '/__rabbx_hmr' });
 
 // Serve application static files or views
 app.get('/', (req, res) => {
@@ -40,10 +40,10 @@ app.get('/', (req, res) => {
   `);
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
 //httpServer.listen(PORT, () => {
- // console.log(`[Express] Dev server running at http://localhost:${PORT}`);
+  console.log(`[Express] Dev server running at http://localhost:${PORT}`);
 //});
 const event = new CustomEvent("userLoggedIn", {
   detail: { username: "Alice" },
@@ -53,7 +53,7 @@ const event = new CustomEvent("userLoggedIn", {
 const { config, server: hmrServer } = HMRServer.createBun({ path: '/__rabbx_hmr' });
 
 Bun.serve({
-  port: 3000,
+  port: PORT,
   fetch: config.fetch,
   websocket: config.websocket,
 });

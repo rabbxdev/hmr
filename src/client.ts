@@ -312,21 +312,45 @@ class HMRClient {
     });
   }
 
-  private handleUpdate(update: { type: 'js' | 'css'; path: string }) {
-    this.clearError();
-    if (update.type === 'css') {
-      const links = document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]');
-      links.forEach((link) => {
-        if (link.href.includes(update.path) || link.href.includes('localhost')) {
-          link.href = `${link.href.split('?')[0]}?t=${Date.now()}`;
-        }
-      });
-      console.log(`[@rabbx/hmr] CSS updated: ${update.path}`);
-      return;
-    }
+  private async handleUpdate(update: { type: 'js' | 'css'; path: string }) {
+  this.clearError();
 
-    window.location.reload();
+  // 1. Handle CSS hot update
+  if (update.type === 'css') {
+    const links = document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]');
+    links.forEach((link) => {
+      if (link.href.includes(update.path) || link.href.includes('localhost')) {
+        link.href = `${link.href.split('?')[0]}?t=${Date.now()}`;
+      }
+    });
+    console.log(`[@rabbx/hmr] CSS updated: ${update.path}`);
+    return;
   }
+
+  // 2. Handle JS hot update (No full reload)
+  if (update.type === 'js') {
+    try {
+      // Append a cache-busting timestamp so the browser fetches the new file version
+      const cacheBustPath = `${update.path}?t=${Date.now()}`;
+      
+      // Dynamically import the updated module
+      const newModule = await import(/* @vite-ignore */ cacheBustPath);
+      
+      console.log(`[@rabbx/hmr] JS updated: ${update.path}`);
+
+      // Optional: Dispatch a custom event so your app can react to the change
+      window.dispatchEvent(new CustomEvent('hmr:update', { 
+        detail: { path: update.path, module: newModule } 
+      }));
+
+    } catch (error) {
+      console.error(`[@rabbx/hmr] Failed to hot update JS: ${update.path}`, error);
+      // Fallback to full reload if the hot update fails
+      window.location.reload(); 
+    }
+  }
+}
+
 
   private showError(err: { message: string; stack?: string }) {
     if (!this.overlay) {
